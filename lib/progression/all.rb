@@ -56,6 +56,34 @@ Synvert::Rewriter.new 'progression', 'all' do
     end
   end
 
+  # has_entries => hash_including
+  within_files '**/spec/**/*.rb' do
+    with_node  node_type: 'send', message: 'has_entries' do
+      replace_with "hash_including({{arguments}})"
+    end
+  end
+
+  # .stubs(foo).with(x).returns(bar) => receive(foo).with(x).and_return(bar)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'returns', receiver: { node_type: 'send', message: 'with', receiver: {node_type: 'send', message: 'stubs'}} do
+      replace_with "allow({{receiver.receiver.receiver}}).to receive({{receiver.receiver.arguments}}).with({{receiver.arguments}}).and_return({{arguments}})"
+    end
+  end
+
+  # .stubs(foo).returns(bar) => receive(foo).and_return(bar)
+  within_files '**/spec/**/*.rb' do
+   with_node node_type: 'send', message: 'returns', receiver: {node_type: 'send', message: 'stubs'} do
+      replace_with "allow({{receiver.receiver}}).to receive({{receiver.arguments}}).and_return({{arguments}})"
+    end
+  end
+
+  # .stubs => receive_messages
+  within_files '**/spec/**/*.rb' do
+    with_node  node_type: 'send', message: 'stubs' do
+      replace_with "allow({{receiver}}).to receive_messages({{arguments}})"
+    end
+  end
+
   # assert_raise(exception) do block end => expect do block end.to raise_error(exception)
   within_files '**/spec/**/*.rb' do
     with_node  node_type: 'block', caller: { node_type: 'send', message: 'assert_raise', arguments: { size: 1 }}  do
@@ -63,12 +91,6 @@ Synvert::Rewriter.new 'progression', 'all' do
     end
   end
 
-  # reporter.expects(:has_active_subscription?).returns(false) => expect(reporter).to receive(:has_active_subscription?).and_return(false)
-  within_files '**/spec/**/*.rb' do
-    with_node  node_type: 'send', receiver: { node_type: 'send', message: 'expects', arguments: { size: 1 }}, message: "returns", arguments: { size: 1}  do
-      replace_with "expect({{receiver.receiver}}).to receive({{receiver.arguments.first}}).and_return({{arguments.first}})"
-    end
-  end
 
   # user.stubs(:invited?).returns(true) => allow(user).to receive(:invited?).and_return(true)
   within_files '**/spec/**/*.rb' do
@@ -112,6 +134,13 @@ Synvert::Rewriter.new 'progression', 'all' do
     end
   end
 
+  # FeatureGate::AccessWins.any_instance.expects(:call).returns(@result_mock) => expect_any_instance_of(FeatureGate::AccessWins).to receive(:call).and_return(@result_mock)
+  within_files '**/spec/**/*.rb' do
+    with_node  node_type: 'send', receiver: { node_type: 'send', message: 'expects', arguments: { size: 1 }, receiver: { node_type: 'send', message: 'any_instance' }}, message: "returns", arguments: { size: 1}  do
+      replace_with "expect_any_instance_of({{receiver.receiver.receiver}}).to receive({{receiver.arguments.first}}).and_return({{arguments.first}})"
+    end
+  end
+
   # @data_loader_class.expects(:new).with(user: @user).returns(@data_loader) => expect(@data_loader_class).to receive(user: @user).with(:new).at_least(:once).and_return(@data_loader)
   within_files '**/spec/**/*.rb' do
     with_node({
@@ -138,6 +167,41 @@ Synvert::Rewriter.new 'progression', 'all' do
   within_files '**/spec/**/*.rb' do
     with_node node_type: 'send', receiver: { node_type: 'send', message: 'expects', arguments: { size: 1 }}, message: 'with'  do
       replace_with 'expect({{receiver.receiver}}).to receive({{receiver.arguments.first}}).with({{arguments.first}}).at_least(:once)'
+    end
+  end
+
+  # reporter.expects(:has_active_subscription?).returns(false) => expect(reporter).to receive(:has_active_subscription?).and_return(false)
+  within_files '**/spec/**/*.rb' do
+    with_node  node_type: 'send', receiver: { node_type: 'send', message: 'expects', arguments: { size: 1 }}, message: "returns", arguments: { size: 1}  do
+      replace_with "expect({{receiver.receiver}}).to receive({{receiver.arguments.first}}).and_return({{arguments.first}})"
+    end
+  end
+
+  # reporter.expects(:has_active_subscription?).returns(false) => expect(reporter).to receive(:has_active_subscription?).and_return(false)
+  within_files '**/spec/**/*.rb' do
+    with_node  node_type: 'send', receiver: { node_type: 'send', message: 'expects', arguments: { size: 1 }}, message: "returns", arguments: { size: 1}  do
+      replace_with "expect({{receiver.receiver}}).to receive({{receiver.arguments.first}}).and_return({{arguments.first}})"
+    end
+  end
+
+  # @svc.expects(:call!).raises(@error_mock) => expect(@svc).to receive(:call!).and_raise(@error_mock)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'raises', receiver: {node_type: 'send', message: 'expects', arguments: {size: 1}} do
+      replace_with "expect({{receiver.receiver}}).to receive({{receiver.arguments}}).and_raise({{arguments}})"
+    end
+  end
+
+  # @tracker.expects(:track) => expect(@tracker).to receive(:track).at_least(:once)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'expects', arguments: {size: 1} do
+      replace_with "expect({{receiver}}).to receive({{arguments}}).at_least(:once)"
+    end
+  end
+
+  # stub => double
+  within_files '**/spec/**/*.rb' do
+   with_node node_type: 'send', message: 'stub', arguments: {size: 0} do
+      replace_with "double"
     end
   end
 end
