@@ -32,9 +32,16 @@ Synvert::Rewriter.new 'progression', 'all' do
   # assert_match(/progression/, team.slug) => expect(/progression/).to match(team.slug)
   within_files '**/spec/**/*.rb' do
     with_node node_type: 'send', message: 'assert_match', arguments: { size: 2 }  do
-      replace_with 'expect({{arguments.first}}).to match({{arguments.last}})'
+      replace_with 'expect({{arguments.last}}).to match({{arguments.first}})'
     end
   end
+
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'assert_no_match', arguments: { size: 2 }  do
+      replace_with 'expect({{arguments.last}}).not_to match({{arguments.first}})'
+    end
+  end
+
 
   # assert_not false => expect(false).to be_falsey
   within_files '**/spec/**/*.rb' do
@@ -97,4 +104,41 @@ Synvert::Rewriter.new 'progression', 'all' do
       replace_with '{{receiver}}.at_least(:once)'
     end
   end
+
+  # assert_not_equal false, false => expect(false).not_to eq(false)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'assert_not_equal', arguments: { size: 2 }  do
+      replace_with 'expect({{arguments.first}}).not_to eq({{arguments.last}})'
+    end
+  end
+
+  # @data_loader_class.expects(:new).with(user: @user).returns(@data_loader) => expect(@data_loader_class).to receive(user: @user).with(:new).at_least(:once).and_return(@data_loader)
+  within_files '**/spec/**/*.rb' do
+    with_node({
+      node_type: 'send',
+      receiver: {
+        node_type: 'send',
+        message: 'with',
+        # arguments: { size: 1 },
+        receiver: {
+          node_type: 'send',
+          message: 'expects',
+          arguments: {size: 1}
+        }
+      },
+      message: 'returns',
+      arguments: {size: 1}
+    }
+    )  do
+        replace_with 'expect({{receiver.receiver.receiver}}).to receive({{receiver.receiver.arguments.first}}).with({{receiver.arguments}}).at_least(:once).and_return({{arguments.first}})'
+      end
+  end
+
+  # ProcessSkillGeneratorJob.expects(:perform_later).with(generator) => expect(ProcessSkillGeneratorJob).to receive(:perform_later).with(generator).at_least(:once)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', receiver: { node_type: 'send', message: 'expects', arguments: { size: 1 }}, message: 'with'  do
+      replace_with 'expect({{receiver.receiver}}).to receive({{receiver.arguments.first}}).with({{arguments.first}}).at_least(:once)'
+    end
+  end
 end
+
