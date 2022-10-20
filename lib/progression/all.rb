@@ -63,6 +63,69 @@ Synvert::Rewriter.new 'progression', 'all' do
     end
   end
 
+  # @subscription_handler.expect(
+  #          :new,
+  #          @subscription_handler,
+  #          [
+  #            @new_org,
+  #            :add,
+  #            @invited_by,
+  #            @invitee,
+  #          ]
+  #        )
+  #  =>
+  # allow(@subscription_handler).to receive(:new).with(**[
+   #   @new_org,
+   #   :add,
+   #   @invited_by,
+   #   @invitee,
+   # ]).and_return(@subscription_handler)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'expect', arguments: {size: 3}  do
+      replace_with "allow({{receiver}}).to receive({{arguments.first}}).with(*{{arguments.last}}).and_return({{arguments.second}})"
+    end
+  end
+
+  # @sub_handler_mock.expect(
+  #         :update_subscription_if_required,
+  #         true,
+  #       )
+  # =>
+  # allow(@sub_handler_mock).to receive(:update_subscription_if_required).and_return(true)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'expect', arguments: {size: 2}  do
+      replace_with "allow({{receiver}}).to receive({{arguments.first}}).and_return({{arguments.last}})"
+    end
+  end
+
+  #  DeliveryMethods::SlackMessage.any_instance.stubs(:deliver).returns(:x) =>  allow_any_instance_of(DeliveryMethods::SlackMessage).to receive(:deliver).and_return(:x)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'returns', receiver: { node_type: 'send', message: 'stubs', arguments: {size: 1}, receiver: {node_type: 'send', message: 'any_instance'}}  do
+      replace_with "allow_any_instance_of({{receiver.receiver.receiver}}).to receive({{receiver.arguments}}).and_return({{arguments}})"
+    end
+  end
+
+  # Outcome.any_instance.stubs(:destroy!).raises(StandardError) => allow_any_instance_of(Outcome).to receive(:destroy!).and_raise(StandardError)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'raises', receiver: { node_type: 'send', message: 'stubs', arguments: {size: 1}, receiver: {node_type: 'send', message: 'any_instance'}}  do
+      replace_with "allow_any_instance_of({{receiver.receiver.receiver}}).to receive({{receiver.arguments}}).and_raise({{arguments}})"
+    end
+  end
+
+  #  DeliveryMethods::SlackMessage.any_instance.stubs(:deliver) =>  allow_any_instance_of(DeliveryMethods::SlackMessage).to receive(:deliver)
+  within_files '**/spec/**/*.rb' do
+    with_node  node_type: 'send', message: 'stubs', arguments: {size: 1}, receiver: {node_type: 'send', message: 'any_instance'}  do
+      replace_with "allow_any_instance_of({{receiver.receiver}}).to receive({{arguments}})"
+    end
+  end
+
+  # Audited::Audit.stubs(:create!).raises(StandardError) => allow(Audited::Audit).to receive(:create!).and_raise(StandardError)
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'raises', receiver: { node_type: 'send', message: 'stubs', arguments: {size: 1}}  do
+      replace_with "allow({{receiver.receiver}}).to receive({{receiver.arguments}}).and_raise({{arguments}})"
+    end
+  end
+
   # .stubs(foo).with(x).returns(bar) => receive(foo).with(x).and_return(bar)
   within_files '**/spec/**/*.rb' do
     with_node node_type: 'send', message: 'returns', receiver: { node_type: 'send', message: 'with', receiver: {node_type: 'send', message: 'stubs'}} do
@@ -74,6 +137,13 @@ Synvert::Rewriter.new 'progression', 'all' do
   within_files '**/spec/**/*.rb' do
    with_node node_type: 'send', message: 'returns', receiver: {node_type: 'send', message: 'stubs'} do
       replace_with "allow({{receiver.receiver}}).to receive({{receiver.arguments}}).and_return({{arguments}})"
+    end
+  end
+
+  # .stubs(:foo) => allow().to receive(:foo)
+  within_files '**/spec/**/*.rb' do
+    with_node  node_type: 'send', message: 'stubs', arguments: {size: 1} do
+      replace_with "allow({{receiver}}).to receive({{arguments}})"
     end
   end
 
@@ -96,6 +166,14 @@ Synvert::Rewriter.new 'progression', 'all' do
   within_files '**/spec/**/*.rb' do
     with_node  node_type: 'send', receiver: { node_type: 'send', message: 'stubs', arguments: { size: 1 }}, message: "returns", arguments: { size: 1}  do
       replace_with "allow({{receiver.receiver}}).to receive({{receiver.arguments.first}}).and_return({{arguments.first}})"
+    end
+  end
+
+
+  #  DeliveryMethods::SlackMessage.any_instance.expects(:deliver) => expect_any_instance_of(DeliveryMethods::SlackMessage).to receive(:deliver)
+  within_files '**/spec/**/*.rb' do
+    with_node  node_type: 'send', message: 'expects', arguments: { size: 1 }, receiver: { node_type: 'send', message: 'any_instance' }  do
+      replace_with "expect_any_instance_of({{receiver.receiver}}).to receive({{arguments.first}})"
     end
   end
 
@@ -134,6 +212,22 @@ Synvert::Rewriter.new 'progression', 'all' do
     end
   end
 
+  # SlackFormatters::WinCreated.any_instance.expects(:call).with(
+  #     recipient: @user,
+  #     win: @win,
+  #     winner: @user
+  #   ).returns({ format: "some_format" })
+  # =>
+  # expect_any_instance_of(SlackFormatters::WinCreated).to receive(:call).with(recipient: @user,
+  #     win: @win,
+  #     winner: @user).and_return({ format: "some_format" })
+  within_files '**/spec/**/*.rb' do
+    with_node  node_type: 'send', receiver: { node_type: 'send', message: 'with', receiver: { node_type: 'send', message: 'expects', arguments: { size: 1 },  receiver: { node_type: 'send', message: 'any_instance' } }}, message: "returns", arguments: { size: 1}  do
+      replace_with "expect_any_instance_of({{receiver.receiver.receiver.receiver}}).to receive({{receiver.receiver.arguments.first}}).with({{receiver.arguments}}).and_return({{arguments.first}})"
+    end
+  end
+
+
   # FeatureGate::AccessWins.any_instance.expects(:call).returns(@result_mock) => expect_any_instance_of(FeatureGate::AccessWins).to receive(:call).and_return(@result_mock)
   within_files '**/spec/**/*.rb' do
     with_node  node_type: 'send', receiver: { node_type: 'send', message: 'expects', arguments: { size: 1 }, receiver: { node_type: 'send', message: 'any_instance' }}, message: "returns", arguments: { size: 1}  do
@@ -162,6 +256,7 @@ Synvert::Rewriter.new 'progression', 'all' do
         replace_with 'expect({{receiver.receiver.receiver}}).to receive({{receiver.receiver.arguments.first}}).with({{receiver.arguments}}).at_least(:once).and_return({{arguments.first}})'
       end
   end
+
 
   # ProcessSkillGeneratorJob.expects(:perform_later).with(generator) => expect(ProcessSkillGeneratorJob).to receive(:perform_later).with(generator).at_least(:once)
   within_files '**/spec/**/*.rb' do
@@ -202,6 +297,20 @@ Synvert::Rewriter.new 'progression', 'all' do
   within_files '**/spec/**/*.rb' do
    with_node node_type: 'send', message: 'stub', arguments: {size: 0} do
       replace_with "double"
+    end
+  end
+
+  # returns => and_return
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'returns'  do
+      replace_with "{{receiver}}.and_return({{arguments}})"
+    end
+  end
+
+  # foo.with(nil).returns => foo.returns
+  within_files '**/spec/**/*.rb' do
+    with_node node_type: 'send', message: 'with', arguments: {first: nil, size: 1}  do
+      replace_with "{{receiver}}"
     end
   end
 end
